@@ -13,4 +13,5 @@ image = { version = "0.25.6", features = ["jpeg", "png"] }    # added with cargo
 log = "0.4.27"          #added with cargo add log
 env_logger = "0.11.8"   # added with cargo add env_logger
 rfd = "0.15.3"  # file dialogue, added with cargo add rfd
-
+uni-ocr = { git = "https://github.com/mediar-ai/uniocr.git" }
+tokio = "1.44.2"

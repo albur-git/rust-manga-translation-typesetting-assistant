@@ -1,30 +1,52 @@
 use eframe::egui;
 use egui::{ColorImage, TextureHandle};
+use image::flat;
 use log::info;
+use uni_ocr::{Language, OcrEngine, OcrOptions, OcrProvider};
+use tokio::runtime::Runtime;
+use tokio::task;
+use tokio::runtime::Handle;
 
-// egui: the GUI library.
-// run_native: a function to launch a native desktop window.
-// HardwareAcceleration, NativeOptions: used to configure how the app window is created (like graphics acceleration).
-
-//You define the state of your app. Here, it just contains one string, name.
 struct MyApp {
     image_path: Option<String>,
     texture: Option<TextureHandle>,
+    handle: Handle,
 }
 
-// This lets you create a default instance of MyApp. It sets the initial name to "World".
-// Rust, core::default is a trait that provides a way to create a default value for a type. The trait defines a single method, default, that is used to generate a "default" instance of a type 
-
-
-impl Default for MyApp {
-    fn default() -> Self {
+impl MyApp {
+    fn new(handle: Handle) -> Self {
         Self {
             image_path: None,
-            texture: None
+            texture: None,
+            handle,
         }
     }
 }
 
+
+
+async fn perform_ocr(filepath: String) {
+    println!("Filepath: {}", filepath);
+    let options = OcrOptions::default()
+        .languages(vec![Language::English])
+        .confidence_threshold(0.8)
+        .timeout(std::time::Duration::from_secs(30));
+
+    let engine = OcrEngine::new(OcrProvider::Auto).expect("Could not get OCR Engine").with_options(options);
+    match engine.recognize_file(&filepath).await {
+        Ok(text) => {
+            let (str1, str2, flt) = text;
+            println!("Extracted str1: {}", str1);
+            println!("Extracted str2: {}", str2);
+            if let Some(flt) = flt {
+                println!("Extracted float: {:.2}%", flt);
+            } else {
+                println!("No float extracted");
+            }
+        },
+        Err(e) => eprintln!("OCR error: {}", e),
+    }
+}
 
 //This is where your UI is built and updated every frame.
 // ctx: This is the egui::Context—your entry point to render and manage UI.
@@ -69,6 +91,15 @@ impl eframe::App for MyApp {
                 }
             }
 
+            if ui.button("Perform OCR").clicked() {
+                if let Some(image_path) = &self.image_path {
+                    let path_clone = image_path.clone();
+                    self.handle.spawn(async move {
+                        perform_ocr(path_clone).await;
+                    });
+                }
+            }
+
             if let Some(texture) = &self.texture {
                 if let Some(image_path) = &self.image_path {
                     ui.image(texture)
@@ -89,17 +120,23 @@ impl eframe::App for MyApp {
 //     Box::new(|_cc| Ok(Box::<MyApp>::default())): A closure that constructs your app. _cc stands for CreationContext, which you’re not using in this case.
 
 fn main() -> eframe::Result {
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    env_logger::init();
+
+    // Create the Tokio runtime
+    let rt = Runtime::new().expect("Failed to create Tokio runtime");
+
+    // Obtain a handle to the runtime
+    let handle = rt.handle().clone();
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
     };
+
+    // Pass the runtime to your app
     eframe::run_native(
         "My egui App",
         options,
-        Box::new(|_cc| {
-            Ok(Box::<MyApp>::default())
-        }),
+        Box::new(|_cc| Ok(Box::new(MyApp::new(handle)))),
     )
 }
